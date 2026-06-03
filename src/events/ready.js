@@ -2,7 +2,7 @@ const { ActivityType } = require('discord.js');
 const logger = require('../utils/logger');
 
 module.exports = {
-    name: 'ready',
+    name: 'clientReady',
     once: true,
     execute(client) {
         logger.success(`✦ Bot đã đăng nhập: ${client.user.tag}`);
