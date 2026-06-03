@@ -55,7 +55,7 @@ module.exports = {
         username: interaction.user.displayName,
       });
       const buttons = createDaoPathButtons();
-      return interaction.editReply({ embeds: [embed], components: [buttons], files });
+      return interaction.editReply({ embeds: [embed], components: buttons, files });
     } catch (err) {
       logger.error('[/tutien] Lỗi chi tiết:', err.message);
       logger.error(err.stack);
