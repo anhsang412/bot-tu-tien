@@ -5,4 +5,4 @@ nixPkgs = ["nodejs_20", "python3", "gcc", "gnumake"]
 cmds = ["npm ci"]
 
 [start]
-cmd = "node src/index.js"
+cmd = "node src/deploy-commands.js && node src/index.js"
