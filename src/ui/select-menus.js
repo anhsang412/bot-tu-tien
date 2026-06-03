@@ -24,7 +24,7 @@ function createSpiritualRootSelect(daoPath = 'chinh', name = 'Unknown') {
   }
 
   const select = new StringSelectMenuBuilder()
-    .setCustomId(`select:root:${daoPath}:${encodeURIComponent(name)}`)
+    .setCustomId(`select:root:${daoPath}:${name}`)
     .setPlaceholder('🌱 Chọn Linh Căn của ngươi...')
     .setMinValues(1)
     .setMaxValues(1)

@@ -262,4 +262,87 @@ module.exports = {
   updateQuestProgress,
   checkQuestRequirements,
   getQuestRequirementText,
+  showPlayerQuests,
 };
+
+// ═══════════════════════════════════════════
+//  showPlayerQuests — Hiển thị nhiệm vụ đang làm
+// ═══════════════════════════════════════════
+
+/**
+ * Hiển thị danh sách nhiệm vụ đang hoạt động của người chơi
+ * @param {import('discord.js').ButtonInteraction} interaction
+ * @param {Object} player - Dữ liệu người chơi từ DB
+ */
+async function showPlayerQuests(interaction, player) {
+  const activeQuests = stmtGetPlayerActiveQuests.all(player.id);
+
+  if (activeQuests.length === 0) {
+    const embed = new EmbedBuilder()
+      .setColor(COLORS.WARNING)
+      .setTitle('📜 Nhiệm Vụ')
+      .setDescription(
+        `**${player.name}** chưa nhận nhiệm vụ nào.\n\n` +
+        `_Hãy đến gặp NPC trong Thế Giới để nhận nhiệm vụ!_`
+      )
+      .setTimestamp();
+    return interaction.update({ embeds: [embed], components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('world:npc').setLabel('👤 Gặp NPC').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('sect:menu').setLabel('🏯 Tông Môn').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('menu:main').setLabel('🏠 Menu Chính').setStyle(ButtonStyle.Secondary)
+      )
+    ]});
+  }
+
+  let questLines = '';
+  for (const aq of activeQuests) {
+    const questData = npcsConfig.getQuestById(aq.quest_id);
+    if (!questData) {
+      questLines += `❓ **Nhiệm vụ không xác định** (${aq.quest_id})\n\n`;
+      continue;
+    }
+
+    const { quest, npc_id } = questData;
+    const npc = npcsConfig.getNpcById(npc_id);
+    const npcName = npc ? npc.name : 'NPC';
+    const reqText = getQuestRequirementText(quest);
+
+    // Tiến trình
+    let progressText = '';
+    if (quest.type === 'hunt' && quest.requirements.kill) {
+      const current = Math.min(aq.progress, quest.requirements.kill.count);
+      progressText = `📊 Tiến trình: **${current}**/${quest.requirements.kill.count}`;
+    } else if (quest.type === 'collect' && quest.requirements.collect) {
+      const invItem = stmtGetInventoryItem.get(player.id, quest.requirements.collect.item_id);
+      const current = invItem ? Math.min(invItem.quantity, quest.requirements.collect.count) : 0;
+      progressText = `📊 Tiến trình: **${current}**/${quest.requirements.collect.count}`;
+    } else if (quest.type === 'cultivation') {
+      progressText = `📊 Tiến trình: Kiểm tra khi nộp`;
+    }
+
+    questLines += `📌 **${quest.name}**\n` +
+      `🧙 NPC: ${npcName}\n` +
+      `📝 _${quest.description}_\n` +
+      `⚠️ Yêu Cầu: ${reqText}\n` +
+      `${progressText}\n\n`;
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor(COLORS.INFO)
+    .setTitle('📜 Nhiệm Vụ Đang Làm')
+    .setDescription(
+      `**${player.name}** — **${activeQuests.length}**/5 nhiệm vụ\n\n` +
+      questLines.trim()
+    )
+    .setFooter({ text: 'Gặp NPC tương ứng để nộp nhiệm vụ đã hoàn thành' })
+    .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('world:npc').setLabel('👤 Gặp NPC').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('sect:menu').setLabel('🏯 Tông Môn').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('menu:main').setLabel('🏠 Menu Chính').setStyle(ButtonStyle.Secondary)
+  );
+
+  await interaction.update({ embeds: [embed], components: [row] });
+}

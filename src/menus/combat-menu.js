@@ -12,15 +12,23 @@ const {
   ButtonBuilder,
   ButtonStyle,
   StringSelectMenuBuilder,
+  AttachmentBuilder,
 } = require('discord.js');
 const db = require('../database/connection');
 const { COLORS, COOLDOWNS } = require('../utils/constants');
 const { formatNumber, progressBar, randomInt, formatTime } = require('../utils/helpers');
 const { createPvECombat, createPvPCombat } = require('../systems/combat');
+const {
+  initInteractiveCombat,
+  buildInteractiveEmbed,
+  buildActionButtons,
+} = require('../systems/interactive-combat');
 const { checkCooldown, setCooldown } = require('../systems/cooldown');
 const monsters = require('../../config/monsters');
 const { getItemById } = require('../../config/items');
 const { showSkillsMenu } = require('../systems/skills');
+const { getMenuImage } = require('../utils/image-helper');
+const { getMonsterImagePath } = require('../../config/monster-images');
 
 // ═══════════════════════════════════════════
 //  Prepared Statements
@@ -80,7 +88,13 @@ async function showCombatMenu(interaction, player) {
       .setStyle(ButtonStyle.Secondary),
   );
 
-  await interaction.update({ embeds: [embed], components: [row1] });
+  const imgData = getMenuImage('combat');
+  const updatePayload = { embeds: [embed], components: [row1] };
+  if (imgData) {
+    embed.setImage(`attachment://${imgData.imageName}`);
+    updatePayload.files = [imgData.attachment];
+  }
+  await interaction.update(updatePayload);
 }
 
 // ═══════════════════════════════════════════
@@ -93,7 +107,7 @@ async function showCombatMenu(interaction, player) {
  * @param {number} maxLines - Số dòng tối đa hiển thị
  * @returns {string}
  */
-function buildCombatLog(turns, maxLines = 8) {
+function buildCombatLog(turns, maxLines = 14) {
   const lines = [];
 
   for (const turn of turns) {
@@ -124,6 +138,108 @@ function buildCombatLog(turns, maxLines = 8) {
 
   // Chỉ lấy maxLines dòng cuối
   return lines.slice(-maxLines).join('\n');
+}
+
+// ═══════════════════════════════════════════
+//  getDangerRating — Đánh giá mức nguy hiểm
+// ═══════════════════════════════════════════
+
+/**
+ * Tính mức nguy hiểm khi đối đầu quái vật
+ * @param {Object} player - Dữ liệu người chơi
+ * @param {Object} monster - Dữ liệu quái vật
+ * @returns {{ stars: string, text: string, color: string }}
+ */
+function getDangerRating(player, monster) {
+  const playerPower = (player.atk || 10) + (player.def || 5) + (player.max_hp || 100) / 10;
+  const monsterPower = (monster.atk || 10) + (monster.def || 5) + (monster.hp || 100) / 10;
+  const ratio = monsterPower / playerPower;
+  if (ratio < 0.5) return { stars: '⭐', text: 'Dễ dàng', color: '#22C55E' };
+  if (ratio < 0.8) return { stars: '⭐⭐', text: 'Bình thường', color: '#3B82F6' };
+  if (ratio < 1.2) return { stars: '⭐⭐⭐', text: 'Thách thức', color: '#F59E0B' };
+  if (ratio < 2.0) return { stars: '⭐⭐⭐⭐', text: 'Nguy hiểm', color: '#EF4444' };
+  return { stars: '⭐⭐⭐⭐⭐', text: 'Chết chắc', color: '#7F1D1D' };
+}
+
+// ═══════════════════════════════════════════
+//  showCombatPreview — Xem trước quái vật
+// ═══════════════════════════════════════════
+
+/**
+ * Hiển thị preview quái vật trước khi chiến đấu
+ * @param {import('discord.js').ButtonInteraction} interaction
+ * @param {Object} player - Dữ liệu người chơi
+ * @param {Object} monster - Dữ liệu quái vật
+ * @param {string} confirmAction - CustomId cho nút xác nhận tấn công
+ * @param {string} backAction - CustomId cho nút quay lại
+ */
+async function showCombatPreview(interaction, player, monster, confirmAction, backAction) {
+  const danger = getDangerRating(player, monster);
+
+  // Xác định loại quái
+  const typeNames = {
+    yeu_thu: '🐾 Yêu Thú',
+    quy_tu: '👹 Quỷ Tu',
+    ma_dao_tu_si: '🧙 Ma Đạo Tu Sĩ',
+    thuong_co_di_thu: '🐲 Thượng Cổ Dị Thú',
+    thien_ma: '👿 Thiên Ma',
+    kiep_thu: '⛈️ Kiếp Thú',
+  };
+  const typeName = typeNames[monster.type] || monster.type;
+
+  // Element text
+  const elementNames = {
+    fire: '🔥 Hỏa', water: '💧 Thủy', ice: '❄️ Băng', thunder: '⚡ Lôi',
+    earth: '🌍 Thổ', wind: '🌪️ Phong', wood: '🌿 Mộc', dark: '🌑 Ám',
+    light: '☀️ Quang', chaos: '🌀 Hỗn Độn', neutral: '⚪ Vô Thuộc Tính',
+  };
+  const elementText = elementNames[monster.element] || '⚪ Vô Thuộc Tính';
+
+  const embed = new EmbedBuilder()
+    .setColor(danger.color)
+    .setTitle(`${monster.emoji} ${monster.name}`)
+    .setDescription(
+      `╔══════════════════════════════════╗\n` +
+      `║ 📋 **THÔNG TIN QUÁI VẬT**\n` +
+      `╠══════════════════════════════════╣\n` +
+      `║ 📛 Loại: ${typeName}\n` +
+      `║ 🏔️ Cảnh giới: Cấp **${monster.realm_level}**\n` +
+      `║ ${elementText}\n` +
+      `╠══════════════════════════════════╣\n` +
+      `║ ❤️ HP: **${formatNumber(monster.hp)}**\n` +
+      `║ ⚔️ ATK: **${formatNumber(monster.atk)}**\n` +
+      `║ 🛡️ DEF: **${formatNumber(monster.def)}**\n` +
+      `║ 💨 SPD: **${formatNumber(monster.speed)}**\n` +
+      `╠══════════════════════════════════╣\n` +
+      `║ ⚠️ Mức nguy hiểm: ${danger.stars}\n` +
+      `║ 📊 Đánh giá: **${danger.text}**\n` +
+      `╠══════════════════════════════════╣\n` +
+      `║ 📖 _${monster.description || 'Không có mô tả.'}_\n` +
+      `╚══════════════════════════════════╝`
+    )
+    .setTimestamp();
+
+  // Monster image
+  const imgPath = getMonsterImagePath(monster.id);
+  let files = [];
+  if (imgPath) {
+    const attachment = new AttachmentBuilder(imgPath, { name: 'monster.png' });
+    files = [attachment];
+    embed.setThumbnail('attachment://monster.png');
+  }
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(confirmAction)
+      .setLabel('⚔️ Tấn Công')
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId(backAction)
+      .setLabel('🔙 Quay Lại')
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  await interaction.update({ embeds: [embed], components: [row], files });
 }
 
 /**
@@ -182,11 +298,11 @@ function runSimpleCombat(player, monster) {
 }
 
 // ═══════════════════════════════════════════
-//  startHunt — Săn quái PvE (tất cả loại quái)
+//  startHunt — Săn quái PvE (xem trước + chiến đấu)
 // ═══════════════════════════════════════════
 
 /**
- * Bắt đầu săn quái — PvE combat với tất cả loại quái
+ * Bắt đầu săn quái — hiển thị preview quái vật trước
  * @param {import('discord.js').ButtonInteraction} interaction
  * @param {Object} player - Dữ liệu người chơi
  */
@@ -219,6 +335,34 @@ async function startHunt(interaction, player) {
 
   // Chọn quái ngẫu nhiên
   const monster = availableMonsters[Math.floor(Math.random() * availableMonsters.length)];
+
+  // Lưu monster vào cache để dùng khi confirm
+  if (!interaction.client._combatPreviewCache) interaction.client._combatPreviewCache = new Map();
+  interaction.client._combatPreviewCache.set(interaction.user.id, { monster, type: 'hunt' });
+
+  // Hiển thị preview
+  return showCombatPreview(interaction, player, monster, 'combat:hunt_confirm', 'combat:menu');
+}
+
+/**
+ * Thực hiện chiến đấu săn quái sau khi xác nhận từ preview
+ * @param {import('discord.js').ButtonInteraction} interaction
+ * @param {Object} player - Dữ liệu người chơi
+ */
+async function executeHunt(interaction, player) {
+  // Lấy monster từ cache
+  const cache = interaction.client._combatPreviewCache?.get(interaction.user.id);
+  if (!cache || !cache.monster) {
+    // Fallback: chọn lại quái ngẫu nhiên
+    return startHunt(interaction, player);
+  }
+  const monster = cache.monster;
+  interaction.client._combatPreviewCache.delete(interaction.user.id);
+
+  // Boss → interactive combat
+  if (monster.is_boss) {
+    return startInteractiveBossFight(interaction, player, monster);
+  }
 
   // Chạy chiến đấu qua combat engine (fallback nội bộ nếu chưa sẵn sàng)
   let combatResult;
@@ -273,7 +417,7 @@ async function startHunt(interaction, player) {
     }
 
     // Tạo nhật ký chiến đấu
-    const combatLog = typeof turns[0] === 'string' ? turns.slice(-8).join('\n') : buildCombatLog(turns, 8);
+    const combatLog = typeof turns[0] === 'string' ? turns.slice(-14).join('\n') : buildCombatLog(turns, 14);
 
     const embed = new EmbedBuilder()
       .setColor(COLORS.success)
@@ -338,11 +482,11 @@ async function startHunt(interaction, player) {
 }
 
 // ═══════════════════════════════════════════
-//  startBeastHunt — Diệt Yêu Thú (chỉ type 'yeu_thu')
+//  startBeastHunt — Diệt Yêu Thú (xem trước + chiến đấu)
 // ═══════════════════════════════════════════
 
 /**
- * Săn yêu thú — lọc chỉ quái loại yeu_thu
+ * Săn yêu thú — hiển thị preview trước khi chiến đấu
  * @param {import('discord.js').ButtonInteraction} interaction
  * @param {Object} player - Dữ liệu người chơi
  */
@@ -377,6 +521,33 @@ async function startBeastHunt(interaction, player) {
 
   // Chọn yêu thú ngẫu nhiên
   const monster = availableMonsters[Math.floor(Math.random() * availableMonsters.length)];
+
+  // Lưu monster vào cache để dùng khi confirm
+  if (!interaction.client._combatPreviewCache) interaction.client._combatPreviewCache = new Map();
+  interaction.client._combatPreviewCache.set(interaction.user.id, { monster, type: 'beast' });
+
+  // Hiển thị preview
+  return showCombatPreview(interaction, player, monster, 'combat:beast_confirm', 'combat:menu');
+}
+
+/**
+ * Thực hiện chiến đấu yêu thú sau khi xác nhận từ preview
+ * @param {import('discord.js').ButtonInteraction} interaction
+ * @param {Object} player - Dữ liệu người chơi
+ */
+async function executeBeastHunt(interaction, player) {
+  // Lấy monster từ cache
+  const cache = interaction.client._combatPreviewCache?.get(interaction.user.id);
+  if (!cache || !cache.monster) {
+    return startBeastHunt(interaction, player);
+  }
+  const monster = cache.monster;
+  interaction.client._combatPreviewCache.delete(interaction.user.id);
+
+  // Boss → interactive combat
+  if (monster.is_boss) {
+    return startInteractiveBossFight(interaction, player, monster);
+  }
 
   // Chạy chiến đấu
   let combatResult;
@@ -428,7 +599,7 @@ async function startBeastHunt(interaction, player) {
       }
     }
 
-    const combatLog = typeof turns[0] === 'string' ? turns.slice(-8).join('\n') : buildCombatLog(turns, 8);
+    const combatLog = typeof turns[0] === 'string' ? turns.slice(-14).join('\n') : buildCombatLog(turns, 14);
 
     const embed = new EmbedBuilder()
       .setColor(COLORS.success)
@@ -679,7 +850,7 @@ async function executePvP(interaction, attacker, targetDiscordId) {
   }
 
   // Tạo nhật ký chiến đấu
-  const combatLog = typeof turns[0] === 'string' ? turns.slice(-8).join('\n') : buildCombatLog(turns, 8);
+  const combatLog = typeof turns[0] === 'string' ? turns.slice(-14).join('\n') : buildCombatLog(turns, 14);
 
   const resultTitle = attackerWon
     ? `⚔️ CHIẾN THẮNG! — ${attacker.name} vs ${defender.name}`
@@ -756,13 +927,53 @@ function runSimplePvP(attacker, defender) {
 }
 
 // ═══════════════════════════════════════════
+//  startInteractiveBossFight — Boss Interactive Combat
+// ═══════════════════════════════════════════
+
+/**
+ * Khởi tạo boss fight interactive thay vì auto-combat
+ * @param {import('discord.js').ButtonInteraction} interaction
+ * @param {Object} player - Dữ liệu người chơi từ DB
+ * @param {Object} monster - Dữ liệu quái vật (is_boss === true)
+ */
+async function startInteractiveBossFight(interaction, player, monster) {
+  // Check if player already in interactive combat
+  if (!interaction.client._interactiveCombats) {
+    interaction.client._interactiveCombats = new Map();
+  }
+
+  // Clean up old combat if exists
+  const existing = interaction.client._interactiveCombats.get(interaction.user.id);
+  if (existing) {
+    interaction.client._interactiveCombats.delete(interaction.user.id);
+  }
+
+  // Init combat state
+  const state = initInteractiveCombat(player, monster);
+  interaction.client._interactiveCombats.set(interaction.user.id, state);
+
+  // Build initial UI
+  const embed = buildInteractiveEmbed(state);
+  const buttons = buildActionButtons(state);
+
+  await interaction.update({
+    embeds: [embed],
+    components: [buttons],
+    files: [],
+  });
+}
+
+// ═══════════════════════════════════════════
 //  Module exports
 // ═══════════════════════════════════════════
 
 module.exports = {
   showCombatMenu,
   startHunt,
+  executeHunt,
   startBeastHunt,
+  executeBeastHunt,
   startPvP,
   executePvP,
+  startInteractiveBossFight,
 };

@@ -1,6 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { COLORS, COOLDOWNS } = require('../utils/constants');
 const { progressBar, formatNumber, formatTime } = require('../utils/helpers');
+const { getMenuImage } = require('../utils/image-helper');
 
 /**
  * Cultivation Menu — Tu Luyện, Lĩnh Ngộ, Đột Phá, Vượt Kiếp
@@ -33,8 +34,11 @@ async function showCultivationMenu(interaction, player) {
       (onCooldown
         ? `⏳ Thời gian hồi: **${formatTime(cooldown.expires_at - Date.now())}**`
         : '✅ Có thể tu luyện!')
-    )
-    .setTimestamp();
+    );
+
+  const img = getMenuImage('cultivation');
+  if (img) embed.setImage(`attachment://${img.imageName}`);
+  embed.setTimestamp();
 
   // Check if can breakthrough
   const canBreakthrough = player.exp >= expNeeded && player.sub_realm >= 9 && nextRealm;
@@ -85,7 +89,10 @@ async function showCultivationMenu(interaction, player) {
       .setStyle(ButtonStyle.Primary),
   );
 
-  await interaction.update({ embeds: [embed], components: [row, row2] });
+  const imgData = getMenuImage('cultivation');
+  const updatePayload = { embeds: [embed], components: [row, row2] };
+  if (imgData) updatePayload.files = [imgData.attachment];
+  await interaction.update(updatePayload);
 }
 
 /**
@@ -142,7 +149,7 @@ async function handleCultivation(interaction, player) {
       );
 
       // Check if player dies from tẩu hỏa
-      if (player.hp <= Math.floor(player.max_hp * 0.2) && chance(30)) {
+      if (newHp <= Math.floor(player.max_hp * 0.2) && chance(30)) {
         db.prepare('UPDATE players SET is_dead = 1 WHERE id = ?').run(player.id);
         const embed = new EmbedBuilder()
           .setColor(COLORS.error)

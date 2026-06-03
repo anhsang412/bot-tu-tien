@@ -1,6 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { COLORS } = require('../utils/constants');
 const { formatNumber } = require('../utils/helpers');
+const { getMenuImage } = require('../utils/image-helper');
 
 /**
  * World Menu — Bí Cảnh, Khoáng Mạch, Tụ Bảo Các, NPC, Bắt Linh Thú
@@ -45,7 +46,13 @@ async function showWorldMenu(interaction, player) {
       .setStyle(ButtonStyle.Secondary),
   );
 
-  await interaction.update({ embeds: [embed], components: [row1, row2] });
+  const imgData = getMenuImage('world');
+  const updatePayload = { embeds: [embed], components: [row1, row2] };
+  if (imgData) {
+    embed.setImage(`attachment://${imgData.imageName}`);
+    updatePayload.files = [imgData.attachment];
+  }
+  await interaction.update(updatePayload);
 }
 
 /**

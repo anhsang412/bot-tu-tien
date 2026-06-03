@@ -141,7 +141,7 @@ const GRADES = {
 // ═══════════════════════════════════════════
 const MAX_INVENTORY = 100;
 const MAX_SKILL_SLOTS = 6;
-const MAX_PET_SLOTS = 3;
+const MAX_PET_SLOTS = 5;
 const MAX_SECT_NAME_LENGTH = 20;
 const INTERACTION_TIMEOUT = 300_000; // 5 phút
 

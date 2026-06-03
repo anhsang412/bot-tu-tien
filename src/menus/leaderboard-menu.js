@@ -1,6 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { COLORS } = require('../utils/constants');
 const { formatNumber } = require('../utils/helpers');
+const { getMenuImage } = require('../utils/image-helper');
 
 /**
  * Leaderboard Menu — Bảng Xếp Hạng
@@ -35,7 +36,13 @@ async function showLeaderboardMenu(interaction, player) {
       .setStyle(ButtonStyle.Secondary),
   );
 
-  await interaction.update({ embeds: [embed], components: [row] });
+  const imgData = getMenuImage('leaderboard');
+  const updatePayload = { embeds: [embed], components: [row] };
+  if (imgData) {
+    embed.setImage(`attachment://${imgData.imageName}`);
+    updatePayload.files = [imgData.attachment];
+  }
+  await interaction.update(updatePayload);
 }
 
 /**

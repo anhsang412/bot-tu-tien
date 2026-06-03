@@ -1,6 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { COLORS } = require('../utils/constants');
 const { formatNumber } = require('../utils/helpers');
+const { getMenuImage } = require('../utils/image-helper');
 
 /**
  * Sect Menu — Tông Môn
@@ -63,7 +64,13 @@ async function showSectMenu(interaction, player) {
       .setStyle(ButtonStyle.Secondary),
   );
 
-  await interaction.update({ embeds: [embed], components: [row] });
+  const imgData = getMenuImage('sect');
+  const updatePayload = { embeds: [embed], components: [row] };
+  if (imgData) {
+    embed.setImage(`attachment://${imgData.imageName}`);
+    updatePayload.files = [imgData.attachment];
+  }
+  await interaction.update(updatePayload);
 }
 
 module.exports = {

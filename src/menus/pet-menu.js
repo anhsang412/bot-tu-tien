@@ -2,6 +2,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const { COLORS } = require('../utils/constants');
 const { formatNumber, progressBar, chance, randomInt } = require('../utils/helpers');
 const { handleFeedPet, handleSwapPet, handleEvolvePet, handleReleasePet } = require('../systems/pets');
+const { getMenuImage } = require('../utils/image-helper');
 
 // Tên tier tiếng Việt
 const TIER_NAME = {
@@ -123,7 +124,13 @@ async function showPetMenu(interaction, player) {
       .setStyle(ButtonStyle.Secondary),
   );
 
-  await interaction.update({ embeds: [embed], components: [row] });
+  const imgData = getMenuImage('pet');
+  const updatePayload = { embeds: [embed], components: [row] };
+  if (imgData) {
+    embed.setImage(`attachment://${imgData.imageName}`);
+    updatePayload.files = [imgData.attachment];
+  }
+  await interaction.update(updatePayload);
 }
 
 /**

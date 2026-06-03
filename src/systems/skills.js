@@ -512,4 +512,156 @@ module.exports = {
   handleUnequipSkill,
   getEquippedSkills,
   getLearnedSkills,
+  showEquipSelectMenu,
+  showUnequipSelectMenu,
 };
+
+// ═══════════════════════════════════════════
+//  showEquipSelectMenu — Hiển thị menu chọn kỹ năng để trang bị
+// ═══════════════════════════════════════════
+
+/**
+ * Hiển thị StringSelectMenu các kỹ năng đã học nhưng chưa trang bị
+ * @param {import('discord.js').ButtonInteraction} interaction
+ * @param {Object} player - Dữ liệu người chơi từ DB
+ */
+async function showEquipSelectMenu(interaction, player) {
+  const learned = stmtGetLearned.all(player.id);
+  const equipped = stmtGetEquipped.all(player.id);
+
+  // Lọc kỹ năng đã học nhưng chưa trang bị
+  const equippedIds = new Set(equipped.map(e => e.skill_id));
+  const available = learned
+    .filter(ls => !equippedIds.has(ls.skill_id))
+    .map(ls => {
+      const skillData = getSkillById(ls.skill_id);
+      return skillData ? { ...skillData, level: ls.level } : null;
+    })
+    .filter(Boolean);
+
+  if (available.length === 0) {
+    const embed = new EmbedBuilder()
+      .setColor(COLORS.WARNING)
+      .setTitle('⚠️ Không có kỹ năng khả dụng')
+      .setDescription(
+        learned.length === 0
+          ? 'Bạn chưa học kỹ năng nào. Hãy sử dụng sách kỹ năng!'
+          : 'Tất cả kỹ năng đã học đều đang được trang bị.'
+      );
+    return interaction.update({ embeds: [embed], components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('skills:menu').setLabel('🔙 Kỹ Năng').setStyle(ButtonStyle.Secondary)
+      )
+    ]});
+  }
+
+  // Tìm slot trống tiếp theo
+  const occupiedSlots = new Set(equipped.map(e => e.slot));
+  let nextSlot = null;
+  for (let s = 1; s <= MAX_SKILL_SLOTS; s++) {
+    if (!occupiedSlots.has(s)) {
+      nextSlot = s;
+      break;
+    }
+  }
+
+  if (nextSlot === null) {
+    const embed = new EmbedBuilder()
+      .setColor(COLORS.WARNING)
+      .setTitle('⚠️ Hết slot trống')
+      .setDescription('Tất cả 6 slot đã đầy. Hãy tháo bớt kỹ năng trước khi trang bị mới.');
+    return interaction.update({ embeds: [embed], components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('skills:unequip').setLabel('📤 Tháo Gỡ').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('skills:menu').setLabel('🔙 Kỹ Năng').setStyle(ButtonStyle.Secondary)
+      )
+    ]});
+  }
+
+  // Xây dựng StringSelectMenu
+  const options = available.slice(0, 25).map(skill => ({
+    label: `${skill.name} (Lv.${skill.level})`,
+    description: `${TYPE_NAME[skill.type] || skill.type} | ${GRADE_NAME[skill.grade] || skill.grade} Cấp → Slot ${nextSlot}`,
+    value: `${skill.id}:${nextSlot}`,
+    emoji: skill.emoji || '💫',
+  }));
+
+  const selectRow = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('select:equip_skill')
+      .setPlaceholder('Chọn kỹ năng để trang bị...')
+      .addOptions(options)
+  );
+
+  const backRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('skills:menu').setLabel('🔙 Kỹ Năng').setStyle(ButtonStyle.Secondary)
+  );
+
+  const slotType = nextSlot <= 4 ? 'Chủ Động' : 'Bị Động';
+  const embed = new EmbedBuilder()
+    .setColor(COLORS.COMBAT)
+    .setTitle('📥 Trang Bị Kỹ Năng')
+    .setDescription(
+      `Chọn kỹ năng để trang bị vào **Slot ${nextSlot}** (${slotType}):\n\n` +
+      `📋 Có **${available.length}** kỹ năng khả dụng`
+    );
+
+  await interaction.update({ embeds: [embed], components: [selectRow, backRow] });
+}
+
+// ═══════════════════════════════════════════
+//  showUnequipSelectMenu — Hiển thị menu chọn kỹ năng để tháo
+// ═══════════════════════════════════════════
+
+/**
+ * Hiển thị StringSelectMenu các kỹ năng đang trang bị để chọn tháo
+ * @param {import('discord.js').ButtonInteraction} interaction
+ * @param {Object} player - Dữ liệu người chơi từ DB
+ */
+async function showUnequipSelectMenu(interaction, player) {
+  const equipped = stmtGetEquipped.all(player.id);
+
+  if (equipped.length === 0) {
+    const embed = new EmbedBuilder()
+      .setColor(COLORS.WARNING)
+      .setTitle('⚠️ Không có kỹ năng để tháo')
+      .setDescription('Bạn chưa trang bị kỹ năng nào.');
+    return interaction.update({ embeds: [embed], components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('skills:menu').setLabel('🔙 Kỹ Năng').setStyle(ButtonStyle.Secondary)
+      )
+    ]});
+  }
+
+  const options = equipped.map(eq => {
+    const skillData = getSkillById(eq.skill_id);
+    const slotType = eq.slot <= 4 ? 'Chủ Động' : 'Bị Động';
+    return {
+      label: `Slot ${eq.slot}: ${skillData ? skillData.name : 'Không xác định'} (Lv.${eq.level})`,
+      description: `${slotType} — ${skillData ? (TYPE_NAME[skillData.type] || skillData.type) : '???'}`,
+      value: `${eq.slot}`,
+      emoji: skillData?.emoji || '💫',
+    };
+  });
+
+  const selectRow = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('select:unequip_skill')
+      .setPlaceholder('Chọn slot để tháo kỹ năng...')
+      .addOptions(options)
+  );
+
+  const backRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('skills:menu').setLabel('🔙 Kỹ Năng').setStyle(ButtonStyle.Secondary)
+  );
+
+  const embed = new EmbedBuilder()
+    .setColor(COLORS.COMBAT)
+    .setTitle('📤 Tháo Gỡ Kỹ Năng')
+    .setDescription(
+      `Chọn slot để tháo kỹ năng:\n\n` +
+      `⚔️ Đang trang bị: **${equipped.length}**/${MAX_SKILL_SLOTS} slot`
+    );
+
+  await interaction.update({ embeds: [embed], components: [selectRow, backRow] });
+}

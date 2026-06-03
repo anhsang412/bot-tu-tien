@@ -1,6 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { COLORS } = require('../utils/constants');
 const { progressBar, formatNumber } = require('../utils/helpers');
+const { getMenuImage } = require('../utils/image-helper');
 
 /**
  * Profile Menu — shows player stats, equipment, skills, pets
@@ -86,7 +87,13 @@ async function showProfileMenu(interaction, player) {
       .setStyle(ButtonStyle.Secondary),
   );
 
-  await interaction.update({ embeds: [embed], components: [row] });
+  const imgData = getMenuImage('profile');
+  const updatePayload = { embeds: [embed], components: [row] };
+  if (imgData) {
+    embed.setImage(`attachment://${imgData.imageName}`);
+    updatePayload.files = [imgData.attachment];
+  }
+  await interaction.update(updatePayload);
 }
 
 /**

@@ -28,6 +28,41 @@ const migrations = [
             }
         }
     },
+    // Migration v3: World Boss Raid tables
+    {
+        version: 3,
+        name: 'add_world_boss_tables',
+        up: () => {
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS world_boss_raids (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    boss_id TEXT NOT NULL,
+                    boss_name TEXT NOT NULL,
+                    max_hp INTEGER NOT NULL,
+                    current_hp INTEGER NOT NULL,
+                    channel_id TEXT,
+                    status TEXT DEFAULT 'active',
+                    spawned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    ended_at DATETIME
+                );
+
+                CREATE TABLE IF NOT EXISTS world_boss_contributions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    raid_id INTEGER NOT NULL,
+                    player_id INTEGER NOT NULL,
+                    damage_dealt INTEGER DEFAULT 0,
+                    contribution_percent INTEGER DEFAULT 0,
+                    exp_reward INTEGER DEFAULT 0,
+                    gold_reward INTEGER DEFAULT 0,
+                    FOREIGN KEY (raid_id) REFERENCES world_boss_raids(id),
+                    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_wb_contributions_raid ON world_boss_contributions(raid_id);
+                CREATE INDEX IF NOT EXISTS idx_wb_contributions_player ON world_boss_contributions(player_id);
+            `);
+        }
+    },
 ];
 
 function runMigrations() {

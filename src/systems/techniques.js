@@ -92,6 +92,8 @@ async function showTechniqueMenu(interaction, player) {
 
   if (interaction.deferred || interaction.replied) {
     await interaction.editReply({ embeds: [embed], components });
+  } else if (interaction.isButton && interaction.isButton()) {
+    await interaction.update({ embeds: [embed], components });
   } else {
     await interaction.reply({ embeds: [embed], components });
   }

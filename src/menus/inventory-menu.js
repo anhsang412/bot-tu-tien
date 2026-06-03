@@ -7,6 +7,7 @@ const {
 } = require('discord.js');
 const { COLORS } = require('../utils/constants');
 const { formatNumber, progressBar } = require('../utils/helpers');
+const { getMenuImage } = require('../utils/image-helper');
 
 // Tên grade tiếng Việt
 const GRADE_NAME = {
@@ -80,7 +81,13 @@ async function showInventoryMenu(interaction, player) {
       .setStyle(ButtonStyle.Secondary),
   );
 
-  await interaction.update({ embeds: [embed], components: [row] });
+  const imgData = getMenuImage('inventory');
+  const updatePayload = { embeds: [embed], components: [row] };
+  if (imgData) {
+    embed.setImage(`attachment://${imgData.imageName}`);
+    updatePayload.files = [imgData.attachment];
+  }
+  await interaction.update(updatePayload);
 }
 
 /**

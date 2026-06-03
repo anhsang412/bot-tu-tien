@@ -6,6 +6,7 @@
 const db = require('../database/connection');
 const logger = require('../utils/logger');
 const itemsConfig = require('../../config/items');
+const { checkDespawn, getActiveRaid } = require('./world-boss');
 
 // Prepared statements cho Đấu Giá Hết Hạn
 const stmtGetExpiredListings = db.prepare(`
@@ -136,6 +137,44 @@ async function timeoutTradeRequests(client) {
 }
 
 /**
+ * Kiểm tra World Boss despawn (gọi mỗi 60s)
+ */
+async function checkWorldBossDespawn(client) {
+  try {
+    const despawnResult = checkDespawn();
+    if (despawnResult) {
+      logger.info(`[Scheduler] World Boss ${despawnResult.bossName} đã biến mất (hết thời gian).`);
+
+      // Thông báo trên channel
+      if (client && despawnResult.channelId) {
+        try {
+          const { EmbedBuilder } = require('discord.js');
+          const channel = await client.channels.fetch(despawnResult.channelId);
+          if (channel) {
+            const hpPercent = Math.floor((despawnResult.currentHp / despawnResult.maxHp) * 100);
+            const embed = new EmbedBuilder()
+              .setColor('#666666')
+              .setTitle(`${despawnResult.bossEmoji} WORLD BOSS ĐÃ BIẾN MẤT!`)
+              .setDescription(
+                `**${despawnResult.bossName}** đã rời đi sau 60 phút!\n\n` +
+                `❤️ HP còn lại: **${hpPercent}%**\n` +
+                `👥 Số người tham gia: **${despawnResult.participantCount}**\n\n` +
+                `_Boss sẽ xuất hiện lại sau..._`
+              )
+              .setTimestamp();
+            await channel.send({ embeds: [embed] });
+          }
+        } catch (discordErr) {
+          logger.debug(`[Scheduler] Không gửi được thông báo despawn: ${discordErr.message}`);
+        }
+      }
+    }
+  } catch (err) {
+    logger.error('[Scheduler] Lỗi kiểm tra World Boss despawn:', err.message);
+  }
+}
+
+/**
  * Khởi chạy Scheduler nền
  */
 function startScheduler(client) {
@@ -144,11 +183,13 @@ function startScheduler(client) {
   // Chạy ngay lần đầu
   expireAuctionListings(client);
   timeoutTradeRequests(client);
+  checkWorldBossDespawn(client);
 
   // Lặp lại mỗi 60 giây
   const intervalId = setInterval(() => {
     expireAuctionListings(client);
     timeoutTradeRequests(client);
+    checkWorldBossDespawn(client);
   }, 60000);
 
   // Trả về intervalId để phục vụ clear khi cần (ví dụ khi tắt bot hoặc chạy unit test)
@@ -158,5 +199,6 @@ function startScheduler(client) {
 module.exports = {
   expireAuctionListings,
   timeoutTradeRequests,
+  checkWorldBossDespawn,
   startScheduler
 };
