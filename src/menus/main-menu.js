@@ -1,4 +1,5 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
+const path = require('path');
 const { COLORS, EMOJIS } = require('../utils/constants');
 
 /**
@@ -15,8 +16,7 @@ async function showMainMenu(interaction, player) {
   const freshPlayer = db.prepare('SELECT * FROM players WHERE discord_id = ?').get(interaction.user.id);
   if (!freshPlayer) return;
 
-  const { AttachmentBuilder } = require('discord.js');
-  const file = new AttachmentBuilder('./data/images/main_menu.png');
+  const file = new AttachmentBuilder(path.join(__dirname, '../../data/images/main_menu.png'));
   const embed = createMainMenuEmbed(freshPlayer);
   const rows = createMainMenuButtons();
 

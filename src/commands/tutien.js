@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } = require('discord.js');
+const path = require('path');
 const { COLORS, EMOJIS } = require('../utils/constants');
 
 module.exports = {
@@ -19,7 +20,7 @@ module.exports = {
 
     // Check if player exists
     const player = db.prepare('SELECT * FROM players WHERE discord_id = ?').get(discordId);
-    const { AttachmentBuilder } = require('discord.js');
+
 
     if (player) {
       if (player.is_dead) {
@@ -39,14 +40,14 @@ module.exports = {
       }
 
       // Show main menu
-      const file = new AttachmentBuilder('./data/images/main_menu.png');
+      const file = new AttachmentBuilder(path.join(__dirname, '../../data/images/main_menu.png'));
       const embed = createMainMenuEmbed(player);
       const rows = createMainMenuButtons();
       return interaction.editReply({ embeds: [embed], components: rows, files: [file] });
     }
 
     // New player — start character creation
-    const file = new AttachmentBuilder('./data/images/welcome.png');
+    const file = new AttachmentBuilder(path.join(__dirname, '../../data/images/welcome.png'));
     const embed = createCharacterCreationEmbed('welcome', {
       username: interaction.user.displayName,
     });
